@@ -16,7 +16,8 @@ var (
 
 // Registers an app, this is needed for deserialization of the app's state
 func RegisterApp(id string, app App) {
-	t := reflect.TypeOf(app)
+	v := reflect.Indirect(reflect.ValueOf(app))
+	t := v.Type()
 	RegisteredApps[id] = t
 	InverseRegisteredApps[t] = id
 }
@@ -34,11 +35,13 @@ type FSStorageBackend struct {
 }
 
 type SerializedAppState struct {
-	AppID     string          `json:"app_id"`
-	ChannelID string          `json:"channel_id"`
-	GuildID   string          `json:"guild_id"`
-	Actions   []*Action       `json:"actions"`
-	AppData   json.RawMessage `json:"app_data"`
+	AppID         string          `json:"app_id"`
+	ChannelID     string          `json:"channel_id"`
+	GuildID       string          `json:"guild_id"`
+	Actions       []*Action       `json:"actions"`
+	AppData       json.RawMessage `json:"app_data"`
+	AllowAllUsers bool            `json:"allow_all_users"`
+	Users         []string        `json:"userids"`
 }
 
 func (f *FSStorageBackend) SaveApps(apps []*Instance) error {
@@ -50,7 +53,9 @@ func (f *FSStorageBackend) SaveApps(apps []*Instance) error {
 	serializedApps := make([]*SerializedAppState, 0, len(apps))
 	for _, v := range apps {
 		v.Lock()
-		t := reflect.TypeOf(v.App)
+
+		t := reflect.Indirect(reflect.ValueOf(v.App)).Type()
+
 		id, ok := InverseRegisteredApps[t]
 		if !ok {
 			logrus.WithField("app_name", t.Name()).Warn("Unknown app")
@@ -64,11 +69,13 @@ func (f *FSStorageBackend) SaveApps(apps []*Instance) error {
 		}
 
 		serializedApps = append(serializedApps, &SerializedAppState{
-			AppID:     id,
-			ChannelID: v.ChannelID,
-			GuildID:   v.GuildID,
-			Actions:   v.Actions,
-			AppData:   serialized,
+			AppID:         id,
+			ChannelID:     v.ChannelID,
+			GuildID:       v.GuildID,
+			Actions:       v.Actions,
+			AppData:       serialized,
+			AllowAllUsers: v.AllowAllUsers,
+			Users:         v.UserIDs,
 		})
 
 		v.Session.ChannelMessageSend(v.ChannelID, "Engine is being shut down.\nApps running in this channel will be saved and started again once the engine is running.")
@@ -88,12 +95,11 @@ func (f *FSStorageBackend) SaveApps(apps []*Instance) error {
 func (f *FSStorageBackend) LoadApps(engine *Engine, session *discordgo.Session) ([]*Instance, error) {
 	data, err := ioutil.ReadFile(f.Path)
 	if err != nil {
+		if os.IsNotExist(err) {
+			logrus.Info("No apps to load")
+			return nil, nil
+		}
 		return nil, err
-	}
-
-	if os.IsNotExist(err) {
-		logrus.Info("No apps to load")
-		return nil, nil
 	}
 
 	var decoded []*SerializedAppState
@@ -113,18 +119,20 @@ func (f *FSStorageBackend) LoadApps(engine *Engine, session *discordgo.Session) 
 
 		appDecoded := reflect.New(t).Interface().(App)
 		instance := &Instance{
-			ChannelID: sas.ChannelID,
-			GuildID:   sas.GuildID,
-			Actions:   sas.Actions,
-			Session:   session,
-			Engine:    engine,
+			ChannelID:     sas.ChannelID,
+			GuildID:       sas.GuildID,
+			Actions:       sas.Actions,
+			Session:       session,
+			Engine:        engine,
+			UserIDs:       sas.Users,
+			AllowAllUsers: sas.AllowAllUsers,
 
 			App: appDecoded,
 		}
 
 		err = appDecoded.LoadState(instance, sas.AppData)
 		if err != nil {
-			logrus.Error("Failed loading app state")
+			logrus.WithError(err).Error("Failed loading app state")
 			continue
 		}
 

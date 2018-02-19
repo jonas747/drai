@@ -72,6 +72,11 @@ func (e *Engine) HandleMessageReactionAdd(s *discordgo.Session, ra *discordgo.Me
 
 func (e *Engine) StopAndSaveStates() error {
 	e.Lock()
+	if e.Stopped {
+		e.Unlock()
+		return nil
+	}
+
 	if e.StorageBackend == nil {
 		e.StorageBackend = &FSStorageBackend{Path: "drai_apps.json"}
 		logrus.Warn("No storage backend specified, using default fs backend: drai_apps.json")
@@ -110,8 +115,9 @@ func (e *Engine) RestoreApps(session *discordgo.Session) error {
 
 // Action represents a registered action for apps
 type Action struct {
+	UserData
+
 	Emoji     string
-	Callback  func(string, *Action) error
 	MessageID string
 
 	RemoveReactionOnSuccess      bool
@@ -119,7 +125,89 @@ type Action struct {
 
 	// Currently unused
 	Name string
+}
 
-	// But whatever you want here
-	UserData interface{}
+func (a *Action) Equal(other *Action) bool {
+	if a.MessageID == other.MessageID && a.Emoji == other.Emoji {
+		return true
+	}
+
+	return false
+}
+
+type UserData struct {
+	M map[string]interface{}
+}
+
+func (u *UserData) Set(key string, val interface{}) {
+	if u.M == nil {
+		u.M = make(map[string]interface{})
+	}
+
+	u.M[key] = val
+}
+
+func (u *UserData) Get(key string) (interface{}, bool) {
+	if u.M == nil {
+		u.M = make(map[string]interface{})
+	}
+
+	v, ok := u.M[key]
+	return v, ok
+}
+
+func (u *UserData) Str(key string) (v string, ok bool) {
+	if iv, ok2 := u.Get(key); ok2 {
+		switch t := iv.(type) {
+		case string:
+			v = t
+			ok = true
+		case []byte:
+			v = string(t)
+			ok = true
+		}
+	}
+
+	return
+}
+
+func (u *UserData) Bool(key string) (v bool, ok bool) {
+	if iv, ok2 := u.Get(key); ok2 {
+		switch t := iv.(type) {
+		case bool:
+			v = t
+			ok = true
+		}
+	}
+
+	return
+}
+
+func (u *UserData) Int64(key string) (v int64, ok bool) {
+	if iv, ok2 := u.Get(key); ok2 {
+		switch t := iv.(type) {
+		case int:
+			v = int64(t)
+			ok = true
+		case int64:
+			v = t
+			ok = true
+		case float64:
+			v = int64(t)
+			ok = true
+		case float32:
+			v = int64(t)
+			ok = true
+		}
+	}
+
+	return
+}
+func (u *UserData) Int(key string) (v int, ok bool) {
+	if iv, ok2 := u.Int64(key); ok2 {
+		v = int(iv)
+		ok = true
+	}
+
+	return
 }

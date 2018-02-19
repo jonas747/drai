@@ -6,7 +6,11 @@ import (
 	"github.com/jonas747/dcmd"
 	"github.com/jonas747/drai"
 	"github.com/jonas747/drai/Applications/tictactoe"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
+	"os/signal"
+	"syscall"
 )
 
 var (
@@ -16,7 +20,16 @@ var (
 	cmdSys *dcmd.System
 )
 
+func debugSrv() {
+	err := http.ListenAndServe(":5000", nil)
+	if err != nil {
+		logrus.WithError(err).Error("Failed starting debug http server")
+	}
+}
+
 func main() {
+	go debugSrv()
+
 	token := os.Getenv("DG_TOKEN")
 	if token == "" {
 		logrus.Fatal("No token provided using the DG_TOKEN env variable")
@@ -36,12 +49,29 @@ func main() {
 	cmdSys.Root.AddCommand(cmdTicTacToe, dcmd.NewTrigger("tictactoe", "ttc"))
 
 	session.AddHandler(cmdSys.HandleMessageCreate)
+
+	err = engine.RestoreApps(session)
+	if err != nil {
+		logrus.WithError(err).Fatal("Failed restoring apps")
+	}
+
 	err = session.Open()
 	if err != nil {
 		logrus.WithError(err).Fatal("Failed Connecting to discord")
 	}
-	logrus.Info("Running...")
-	select {}
+
+	logrus.Println("Bot is now running.  Press CTRL-C to exit.")
+	sc := make(chan os.Signal, 1)
+	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
+	<-sc
+
+	logrus.Info("Shutting down, saving all running apps...")
+	err = engine.StopAndSaveStates()
+	if err != nil {
+		logrus.WithError(err).Error("Failed stopping one or more apps.")
+	} else {
+		logrus.Info("All apps saved")
+	}
 }
 
 var cmdTicTacToe = &dcmd.SimpleCmd{

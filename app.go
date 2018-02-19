@@ -21,7 +21,7 @@ type Instance struct {
 	Actions   []*Action
 
 	// Will only react to these users
-	userIDs       []string
+	UserIDs       []string
 	AllowAllUsers bool
 }
 
@@ -31,7 +31,7 @@ func (i *Instance) handleReactionAdd(s *discordgo.Session, ra *discordgo.Message
 	if !i.AllowAllUsers {
 		// Check user filter
 		found := false
-		for _, v := range i.userIDs {
+		for _, v := range i.UserIDs {
 			if v == ra.UserID {
 				found = true
 				break
@@ -43,7 +43,6 @@ func (i *Instance) handleReactionAdd(s *discordgo.Session, ra *discordgo.Message
 			return
 		}
 	}
-
 	var action *Action
 
 	// Find the corresponding action
@@ -63,7 +62,7 @@ func (i *Instance) handleReactionAdd(s *discordgo.Session, ra *discordgo.Message
 
 	// Upgrade the lock, and call the callback if found
 	i.Lock()
-	err := action.Callback(ra.UserID, action)
+	err := i.App.HandleAction(ra.UserID, action)
 	i.Unlock()
 
 	if err != nil {
@@ -119,18 +118,18 @@ func (i *Instance) ClearActions() {
 
 // AddUsers adds the specified users to the whitelist
 // Note: If called outside of Start, Exit, or action callbacks, then you need to the instance to avoid race conditions
-func (i *Instance) AddUsers(userIDs []string) {
-	i.userIDs = append(i.userIDs, userIDs...)
+func (i *Instance) AddUsers(UserIDs []string) {
+	i.UserIDs = append(i.UserIDs, UserIDs...)
 }
 
 // RemoveUsers removes the specified users from the whitelist
 // Note: If called outside of Start, Exit, or action callbacks, then you need to the instance to avoid race conditions
-func (i *Instance) RemoveUsers(userIDs []string) {
+func (i *Instance) RemoveUsers(UserIDs []string) {
 	for j := 0; j < len(i.Actions); j++ {
-		for _, uid := range userIDs {
-			elem := i.userIDs[j]
+		for _, uid := range UserIDs {
+			elem := i.UserIDs[j]
 			if elem == uid {
-				i.userIDs = append(i.userIDs[:j], i.userIDs[j+1:]...)
+				i.UserIDs = append(i.UserIDs[:j], i.UserIDs[j+1:]...)
 			}
 		}
 	}
@@ -139,7 +138,7 @@ func (i *Instance) RemoveUsers(userIDs []string) {
 // ClearUsers clears the whitelist
 // Note: If called outside of Start, Exit, or action callbacks, then you need to the instance to avoid race conditions
 func (i *Instance) ClearUsers() {
-	i.userIDs = nil
+	i.UserIDs = nil
 }
 
 // Exit ends a App.

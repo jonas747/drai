@@ -7,25 +7,32 @@ import (
 	"github.com/jonas747/drai"
 )
 
+func init() {
+	drai.RegisterApp("github.com/jonas747/drai/tictactoe", &Game{})
+}
+
 func (g *Game) SerializeState() ([]byte, error) {
 	return json.Marshal(g)
 }
 
-func (g *Game) LoadState(data []byte) error {
+func (g *Game) LoadState(instance *drai.Instance, data []byte) error {
 	err := json.Unmarshal(data, g)
 	if err != nil {
 		return err
 	}
 
+	g.Instance = instance
+
 	if g.UserFinder != nil {
 		g.UserFinder.UsersFoundCB = g.onUsersFound
+		g.UserFinder.Instance = instance
 	}
 
 	return nil
 }
 
 type Game struct {
-	Instance *drai.Instance
+	Instance *drai.Instance `json:"-"`
 
 	UserFinder *drai.UserFinder
 	Player1    *discordgo.User
@@ -94,7 +101,7 @@ func (g *Game) UpdateMessage() {
 	content += fmt.Sprintf("\nCurrent Turn: %d", g.CurrentTurn)
 	winner := g.CheckForWinner()
 	if winner != nil {
-		content += fmt.Sprintf("\n**%s WON! WOOOHOO!", winner.Username)
+		content += fmt.Sprintf("\n**%s** WON! WOOOHOO!", winner.Username)
 	} else {
 		content += fmt.Sprintf("\nCurrent Player: %s#%s", currentTurn.Username, currentTurn.Discriminator)
 	}
@@ -179,9 +186,8 @@ func (g *Game) onUsersFound(users []*discordgo.User) {
 		a := &drai.Action{
 			Emoji:     Emojis[i],
 			MessageID: g.MessageID,
-			UserData:  i,
 		}
-
+		a.Set("index", i)
 		g.Instance.AddActions(a)
 	}
 
@@ -191,6 +197,10 @@ func (g *Game) onUsersFound(users []*discordgo.User) {
 }
 
 func (g *Game) HandleAction(userID string, action *drai.Action) error {
+	if handled, err := g.UserFinder.HandleAction(userID, action); handled {
+		return err
+	}
+
 	cPlayer := g.TurnPlayer(g.CurrentTurn)
 	if cPlayer.ID != userID {
 		return nil
@@ -201,7 +211,7 @@ func (g *Game) HandleAction(userID string, action *drai.Action) error {
 		symbol = "X"
 	}
 
-	index := action.UserData.(int)
+	index, _ := action.Int("index")
 	if g.Board[index] == "O" || g.Board[index] == "X" {
 		return nil // Already taken
 	}

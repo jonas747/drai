@@ -6,16 +6,16 @@ import (
 )
 
 type UserFinder struct {
-	Instance         *Instance
+	Instance         *Instance `json:"-"`
 	Users            []*discordgo.User
 	NumUsersToFind   int
-	UsersFoundCB     func([]*discordgo.User)
-	usersFoundCalled bool
+	UsersFoundCB     func([]*discordgo.User) `json:"-"`
+	UsersFoundCalled bool
 
 	MessageID string
 
-	addAction    *Action
-	removeAction *Action
+	AddAction    *Action
+	RemoveAction *Action
 }
 
 func (u *UserFinder) Start() error {
@@ -26,19 +26,17 @@ func (u *UserFinder) Start() error {
 		return err
 	}
 
-	u.addAction = &Action{
+	u.AddAction = &Action{
 		Emoji:     "➕",
-		Callback:  u.onActionAdd,
 		MessageID: u.MessageID,
 	}
 
-	u.removeAction = &Action{
+	u.RemoveAction = &Action{
 		Emoji:     "➖",
-		Callback:  u.onActionRemove,
 		MessageID: u.MessageID,
 	}
 
-	return u.Instance.AddActions(u.addAction, u.removeAction)
+	return u.Instance.AddActions(u.AddAction, u.RemoveAction)
 }
 
 func (u *UserFinder) UpdateMessage() error {
@@ -71,14 +69,16 @@ func (u *UserFinder) UpdateMessage() error {
 	return nil
 }
 
-func (u *UserFinder) HandleAction(userID string, action *Action) error {
-	if action == u.addAction {
-		return u.onActionAdd(userID, action)
-	} else if action == u.removeAction {
-		return u.onActionRemove(userID, action)
+func (u *UserFinder) HandleAction(userID string, action *Action) (handled bool, err error) {
+	if action.Equal(u.AddAction) {
+		handled = true
+		err = u.onActionAdd(userID, action)
+	} else if action.Equal(u.RemoveAction) {
+		handled = true
+		err = u.onActionRemove(userID, action)
 	}
 
-	return nil
+	return
 }
 
 func (u *UserFinder) onActionAdd(userID string, action *Action) error {
@@ -118,11 +118,11 @@ func (u *UserFinder) DelayedCallDB() {
 
 	// Have to explicitly lock it here since were outside of any of the managed functions
 	u.Instance.Lock()
-	if len(u.Users) >= u.NumUsersToFind && !u.usersFoundCalled {
+	if len(u.Users) >= u.NumUsersToFind && !u.UsersFoundCalled {
 		u.UsersFoundCB(u.Users)
-		u.usersFoundCalled = true
+		u.UsersFoundCalled = true
 
-		u.Instance.RemoveActions(u.addAction, u.removeAction)
+		u.Instance.RemoveActions(u.AddAction, u.RemoveAction)
 	}
 
 	u.Instance.Unlock()
