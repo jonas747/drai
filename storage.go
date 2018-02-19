@@ -70,6 +70,9 @@ func (f *FSStorageBackend) SaveApps(apps []*Instance) error {
 			Actions:   v.Actions,
 			AppData:   serialized,
 		})
+
+		v.Session.ChannelMessageSend(v.ChannelID, "Engine is being shut down.\nApps running in this channel will be saved and started again once the engine is running.")
+		v.Unlock()
 	}
 
 	allEncoded, err := json.Marshal(serializedApps)
@@ -126,6 +129,8 @@ func (f *FSStorageBackend) LoadApps(engine *Engine, session *discordgo.Session) 
 		}
 
 		result = append(result, instance)
+
+		session.ChannelMessageSend(sas.ChannelID, "Engine has now started again and will act on reactions again.")
 	}
 
 	return result, nil

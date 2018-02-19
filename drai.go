@@ -1,9 +1,14 @@
 package drai
 
 import (
+	"errors"
 	"github.com/Sirupsen/logrus"
 	"github.com/bwmarrin/discordgo"
 	"sync"
+)
+
+var (
+	ErrStopping = errors.New("Engine is stopping")
 )
 
 type Engine struct {
@@ -13,6 +18,8 @@ type Engine struct {
 	CurrentInstances []*Instance
 
 	StorageBackend StorageBackend
+
+	Stopped bool
 }
 
 func NewEngine() *Engine {
@@ -35,6 +42,10 @@ func (e *Engine) StartApp(session *discordgo.Session, app App, guildID, channelI
 	}
 
 	e.Lock()
+	if e.Stopped {
+		return nil, ErrStopping
+	}
+
 	e.CurrentInstances = append(e.CurrentInstances, instance)
 	e.Unlock()
 
@@ -45,6 +56,10 @@ func (e *Engine) StartApp(session *discordgo.Session, app App, guildID, channelI
 // it handles incomming Reaction Add events to be further processed
 func (e *Engine) HandleMessageReactionAdd(s *discordgo.Session, ra *discordgo.MessageReactionAdd) {
 	e.RLock()
+	if e.Stopped {
+		e.RUnlock()
+		return
+	}
 
 	for _, instance := range e.CurrentInstances {
 		if instance.ChannelID == ra.ChannelID {
@@ -61,6 +76,8 @@ func (e *Engine) StopAndSaveStates() error {
 		e.StorageBackend = &FSStorageBackend{Path: "drai_apps.json"}
 		logrus.Warn("No storage backend specified, using default fs backend: drai_apps.json")
 	}
+
+	e.Stopped = true
 
 	err := e.StorageBackend.SaveApps(e.CurrentInstances)
 	if err != nil {

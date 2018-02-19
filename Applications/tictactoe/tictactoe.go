@@ -1,14 +1,28 @@
 package tictactoe
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/bwmarrin/discordgo"
 	"github.com/jonas747/drai"
 )
 
-// TODO
-func (g *Game) SerializeFullState() ([]byte, error) { return nil, nil }
-func (g *Game) LoadFullState([]byte) error          { return nil }
+func (g *Game) SerializeState() ([]byte, error) {
+	return json.Marshal(g)
+}
+
+func (g *Game) LoadState(data []byte) error {
+	err := json.Unmarshal(data, g)
+	if err != nil {
+		return err
+	}
+
+	if g.UserFinder != nil {
+		g.UserFinder.UsersFoundCB = g.onUsersFound
+	}
+
+	return nil
+}
 
 type Game struct {
 	Instance *drai.Instance
@@ -85,7 +99,7 @@ func (g *Game) UpdateMessage() {
 		content += fmt.Sprintf("\nCurrent Player: %s#%s", currentTurn.Username, currentTurn.Discriminator)
 	}
 
-	g.Instance.Session().ChannelMessageEdit(g.Instance.ChannelID(), g.MessageID, content)
+	g.Instance.Session.ChannelMessageEdit(g.Instance.ChannelID, g.MessageID, content)
 }
 
 func (g *Game) TurnPlayer(turn int) *discordgo.User {
@@ -164,7 +178,6 @@ func (g *Game) onUsersFound(users []*discordgo.User) {
 	for i := 0; i < 9; i++ {
 		a := &drai.Action{
 			Emoji:     Emojis[i],
-			Callback:  g.onAction,
 			MessageID: g.MessageID,
 			UserData:  i,
 		}
@@ -177,7 +190,7 @@ func (g *Game) onUsersFound(users []*discordgo.User) {
 	return
 }
 
-func (g *Game) onAction(userID string, action *drai.Action) error {
+func (g *Game) HandleAction(userID string, action *drai.Action) error {
 	cPlayer := g.TurnPlayer(g.CurrentTurn)
 	if cPlayer.ID != userID {
 		return nil
