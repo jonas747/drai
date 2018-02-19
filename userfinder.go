@@ -58,14 +58,24 @@ func (u *UserFinder) UpdateMessage() error {
 	}
 
 	if u.MessageID == "" {
-		m, err := u.Instance.session.ChannelMessageSend(u.Instance.channelID, content)
+		m, err := u.Instance.Session.ChannelMessageSend(u.Instance.ChannelID, content)
 		if err != nil {
 			return err
 		}
 		u.MessageID = m.ID
 	} else {
-		_, err := u.Instance.session.ChannelMessageEdit(u.Instance.ChannelID(), u.MessageID, content)
+		_, err := u.Instance.Session.ChannelMessageEdit(u.Instance.ChannelID, u.MessageID, content)
 		return err
+	}
+
+	return nil
+}
+
+func (u *UserFinder) HandleAction(userID string, action *Action) error {
+	if action == u.addAction {
+		return u.onActionAdd(userID, action)
+	} else if action == u.removeAction {
+		return u.onActionRemove(userID, action)
 	}
 
 	return nil
@@ -79,7 +89,7 @@ func (u *UserFinder) onActionAdd(userID string, action *Action) error {
 		}
 	}
 
-	member, err := u.Instance.session.GuildMember(u.Instance.guildID, userID)
+	member, err := u.Instance.Session.GuildMember(u.Instance.GuildID, userID)
 	if err != nil {
 		return err
 	}
