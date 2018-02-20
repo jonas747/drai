@@ -5,6 +5,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/pkg/errors"
 	"sync"
+	"time"
 )
 
 // Instance represents a currently loaded and running app
@@ -23,6 +24,9 @@ type Instance struct {
 	// Will only react to these users
 	UserIDs       []string
 	AllowAllUsers bool
+
+	IdleTimeout time.Duration
+	LastAction  time.Time
 }
 
 func (i *Instance) handleReactionAdd(s *discordgo.Session, ra *discordgo.MessageReactionAdd) {

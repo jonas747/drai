@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"os"
 	"reflect"
+	"time"
 )
 
 var (
@@ -42,6 +43,8 @@ type SerializedAppState struct {
 	AppData       json.RawMessage `json:"app_data"`
 	AllowAllUsers bool            `json:"allow_all_users"`
 	Users         []string        `json:"userids"`
+	IdleTimeout   time.Duration   `json:"idle_timeout"`
+	LastAction    time.Time       `json:"last_action"`
 }
 
 func (f *FSStorageBackend) SaveApps(apps []*Instance) error {
@@ -76,6 +79,8 @@ func (f *FSStorageBackend) SaveApps(apps []*Instance) error {
 			AppData:       serialized,
 			AllowAllUsers: v.AllowAllUsers,
 			Users:         v.UserIDs,
+			IdleTimeout:   v.IdleTimeout,
+			LastAction:    v.LastAction,
 		})
 
 		v.Session.ChannelMessageSend(v.ChannelID, "Engine is being shut down.\nApps running in this channel will be saved and started again once the engine is running.")
@@ -126,6 +131,8 @@ func (f *FSStorageBackend) LoadApps(engine *Engine, session *discordgo.Session) 
 			Engine:        engine,
 			UserIDs:       sas.Users,
 			AllowAllUsers: sas.AllowAllUsers,
+			IdleTimeout:   sas.IdleTimeout,
+			LastAction:    sas.LastAction,
 
 			App: appDecoded,
 		}

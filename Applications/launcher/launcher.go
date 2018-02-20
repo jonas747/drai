@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 )
 
 var (
@@ -55,6 +56,8 @@ func main() {
 		logrus.WithError(err).Fatal("Failed restoring apps")
 	}
 
+	go engine.Run()
+
 	err = session.Open()
 	if err != nil {
 		logrus.WithError(err).Fatal("Failed Connecting to discord")
@@ -78,7 +81,7 @@ var cmdTicTacToe = &dcmd.SimpleCmd{
 	ShortDesc: "Play tic tac toe",
 	RunFunc: func(data *dcmd.Data) (interface{}, error) {
 		game := tictactoe.NewGame(data.Msg.Author)
-		_, err := engine.StartApp(data.Session, game, data.Guild.ID, data.Channel.ID)
+		_, err := engine.StartApp(data.Session, game, data.Guild.ID, data.Channel.ID, time.Minute)
 		if err != nil {
 			logrus.WithError(err).Error("Failed starting tic tac toe :(")
 			return "Failed starting :(", err

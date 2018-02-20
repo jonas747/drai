@@ -5,6 +5,7 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/bwmarrin/discordgo"
 	"sync"
+	"time"
 )
 
 var (
@@ -26,14 +27,43 @@ func NewEngine() *Engine {
 	return &Engine{}
 }
 
+func (e *Engine) Run() {
+	ticker := time.NewTicker(time.Second * 10)
+	for {
+		<-ticker.C
+
+		e.RLock()
+		runningCop := make([]*Instance, len(e.CurrentInstances))
+		copy(runningCop, e.CurrentInstances)
+		e.RUnlock()
+
+		for _, v := range runningCop {
+			v.RLock()
+			if v.IdleTimeout != 0 && time.Now().Sub(v.LastAction) > v.IdleTimeout {
+				v.RUnlock()
+				go func() {
+					v.Lock()
+					v.Exit()
+					v.Unlock()
+				}()
+				logrus.Info("App had idle timeout")
+				continue
+			}
+			v.RUnlock()
+		}
+	}
+}
+
 // StartApp starts the specified application, returns an error if the app failed to start
-func (e *Engine) StartApp(session *discordgo.Session, app App, guildID, channelID string) (*Instance, error) {
+func (e *Engine) StartApp(session *discordgo.Session, app App, guildID, channelID string, idleTimeout time.Duration) (*Instance, error) {
 	instance := &Instance{
-		App:       app,
-		ChannelID: channelID,
-		GuildID:   guildID,
-		Engine:    e,
-		Session:   session,
+		App:         app,
+		ChannelID:   channelID,
+		GuildID:     guildID,
+		Engine:      e,
+		Session:     session,
+		IdleTimeout: idleTimeout,
+		LastAction:  time.Now(),
 	}
 
 	err := instance.App.Start(instance)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/bwmarrin/discordgo"
 	"github.com/jonas747/drai"
+	"time"
 )
 
 func init() {
@@ -46,7 +47,9 @@ type Game struct {
 
 	CurrentTurn int
 
-	MessageID string
+	M1 string
+	M2 string
+	M3 string
 }
 
 var Emojis = []string{
@@ -79,11 +82,24 @@ func (g *Game) Start(instance *drai.Instance) error {
 	}
 
 	// m := instance.Session().ChannelMessageSend(instance.Channel(), "Setting up...")
-	return g.UserFinder.Start()
+	err := g.UserFinder.Start()
+	if err != nil {
+		return err
+	}
+
+	m2, _ := g.Instance.Session.ChannelMessageSend(g.Instance.ChannelID, "-")
+	m3, _ := g.Instance.Session.ChannelMessageSend(g.Instance.ChannelID, "-")
+	g.M2 = m2.ID
+	g.M3 = m3.ID
+
+	return nil
 }
 
 // Perform cleanup here
-func (g *Game) Exit(instance *drai.Instance) error { return nil }
+func (g *Game) Exit(instance *drai.Instance) error {
+	g.Instance.ClearActions()
+	return nil
+}
 
 func (g *Game) UpdateMessage() {
 	currentTurn := g.TurnPlayer(g.CurrentTurn)
@@ -106,7 +122,7 @@ func (g *Game) UpdateMessage() {
 		content += fmt.Sprintf("\nCurrent Player: %s#%s", currentTurn.Username, currentTurn.Discriminator)
 	}
 
-	g.Instance.Session.ChannelMessageEdit(g.Instance.ChannelID, g.MessageID, content)
+	g.Instance.Session.ChannelMessageEdit(g.Instance.ChannelID, g.M1, content)
 }
 
 func (g *Game) TurnPlayer(turn int) *discordgo.User {
@@ -178,15 +194,24 @@ func (g *Game) onUsersFound(users []*discordgo.User) {
 	g.UsersFound = true
 
 	// Reuse this message
-	g.MessageID = g.UserFinder.MessageID
+	g.M1 = g.UserFinder.MessageID
 
 	g.Instance.ClearActions()
 
 	for i := 0; i < 9; i++ {
+		mID := g.M1
+		if i > 2 {
+			mID = g.M2
+		}
+		if i > 5 {
+			mID = g.M3
+		}
+
 		a := &drai.Action{
 			Emoji:     Emojis[i],
-			MessageID: g.MessageID,
+			MessageID: mID,
 		}
+
 		a.Set("index", i)
 		g.Instance.AddActions(a)
 	}
@@ -198,6 +223,7 @@ func (g *Game) onUsersFound(users []*discordgo.User) {
 
 func (g *Game) HandleAction(userID string, action *drai.Action) error {
 	if handled, err := g.UserFinder.HandleAction(userID, action); handled {
+		g.Instance.LastAction = time.Now()
 		return err
 	}
 
@@ -205,6 +231,7 @@ func (g *Game) HandleAction(userID string, action *drai.Action) error {
 	if cPlayer.ID != userID {
 		return nil
 	}
+	g.Instance.LastAction = time.Now()
 
 	symbol := "O"
 	if cPlayer == g.Player2 {
